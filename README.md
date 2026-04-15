@@ -2,6 +2,24 @@
 
 An MCP server that lets Claude talk directly to your Azure Cosmos DB (MongoDB API) accounts — no service principals, no managed identities, no connection strings in config files. Just `az login` and go.
 
+## Background
+
+This project grew out of [QueryPal](https://github.com/ChingEnLin/QueryPal) — a full web platform for exploring and managing Cosmos DB with AI, built for teams that need collaboration features, CRUD operations, audit trails, and a proper deployment.
+
+QueryPal solves the team problem well. But in day-to-day development there's a different problem: you just want to quickly ask questions about your data without opening another browser tab, logging into a deployed app, or remembering what that collection schema looked like. You're already in Claude. Your Azure credentials are already on your machine. That gap is what QueryMCPal is for.
+
+| | [QueryPal](https://github.com/ChingEnLin/QueryPal) | QueryMCPal |
+|---|---|---|
+| **Built for** | Teams, analysts, production workflows | Individual developers, local exploration |
+| **Interface** | Web app (React + FastAPI, deployed) | Claude Desktop (MCP, runs locally) |
+| **AI** | Google Gemini | Claude |
+| **Operations** | Full CRUD + audit trails | Read-only |
+| **Auth** | Microsoft Entra ID + OBO flow | `az login` (your existing CLI session) |
+| **Infrastructure** | Cloud Run deployment | Docker on your Mac |
+| **Collaboration** | Saved queries, sharing, team access | Single user |
+
+Think of them as the same idea at different points in the workflow: QueryPal is where the team goes to manage data together; QueryMCPal is what you reach for when you're building something and need to quickly understand what's in the database without breaking your flow.
+
 ## Why this instead of the official toolkit?
 
 The [official Azure Cosmos DB MCP Toolkit](https://github.com/AzureCosmosDB/MCPToolkit) requires you to supply a connection string up front. That means either hardcoding credentials in your Claude Desktop config, or setting up a service principal with a client secret — extra Azure resources to manage, extra things to rotate, extra things to leak.
