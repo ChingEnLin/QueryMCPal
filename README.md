@@ -2,6 +2,10 @@
 
 An MCP server that lets Claude talk directly to your Azure Cosmos DB (MongoDB API) accounts — no service principals, no managed identities, no connection strings in config files. Just `az login` and go.
 
+**You will never copy-paste a password from the Azure Portal.** QueryMCPal authenticates using the Azure CLI session already on your machine — the same one you use for everything else. No secrets in config files, nothing to rotate, nothing to leak.
+
+**You don't need to know your database structure.** Just ask Claude *"What's in here?"* and it will sample your collection and map out every field, type, and nesting level before you write a single query.
+
 ## Background
 
 This project grew out of [QueryPal](https://github.com/ChingEnLin/QueryPal) — a full web platform for exploring and managing Cosmos DB with AI, built for teams that need collaboration features, CRUD operations, audit trails, and a proper deployment.
