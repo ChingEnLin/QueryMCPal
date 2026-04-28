@@ -3,41 +3,58 @@ server.py
 QueryMCPal – Azure Cosmos DB (MongoDB API) MCP Server
 
 Tools exposed to Claude:
+  Auth       : check_auth
   Discovery  : list_cosmos_accounts, connect_account, list_databases, list_collections
   Inspection : describe_collection, get_document
   Query      : find_documents, aggregate, count_documents, distinct_values
-  Context    : show_context, clear_context
+  Context    : show_context, set_context, clear_context
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
+from typing import Any
 
 import mcp.server.stdio
 import mcp.types as types
 from mcp.server import Server
 
 from querymcpal import azure_service, mongo_service
-from querymcpal.context import session
+from querymcpal.context import SessionContext
 
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 logger = logging.getLogger("querymcpal")
 
 # ---------------------------------------------------------------------------
-# Server bootstrap
+# Hard cap on result size (Item 2)
 # ---------------------------------------------------------------------------
+MAX_RESULT_LIMIT = int(os.getenv("QUERYMCPAL_MAX_LIMIT", "1000"))
 
+# ---------------------------------------------------------------------------
+# Server bootstrap + per-lifecycle session (Item 4)
+# ---------------------------------------------------------------------------
 app = Server("querymcpal")
+session = SessionContext()
 
 # ---------------------------------------------------------------------------
 # Tool registry
 # ---------------------------------------------------------------------------
 
-@app.list_tools()
+@app.list_tools()  # type: ignore[no-untyped-call, untyped-decorator]
 async def list_tools() -> list[types.Tool]:
     return [
+        # ── Auth ───────────────────────────────────────────────────────────
+        types.Tool(
+            name="check_auth",
+            description=(
+                "Check whether the current Azure credential is valid. "
+                "Call this first if you suspect an authentication problem."
+            ),
+            inputSchema={"type": "object", "properties": {}, "required": []},
+        ),
         # ── Discovery ──────────────────────────────────────────────────────
         types.Tool(
             name="list_cosmos_accounts",
@@ -144,6 +161,7 @@ async def list_tools() -> list[types.Tool]:
                 "Execute a MongoDB find() query. "
                 "Accepts a JSON filter, optional projection, sort, skip, and limit. "
                 "Returns matching documents plus total match count. "
+                f"Hard limit: {MAX_RESULT_LIMIT} documents (override with QUERYMCPAL_MAX_LIMIT env var). "
                 "Example filter: '{\"status\": \"active\", \"age\": {\"$gt\": 30}}'"
             ),
             inputSchema={
@@ -164,7 +182,7 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Max documents to return (default 20, max 200).",
+                        "description": f"Max documents to return (default 20, max {MAX_RESULT_LIMIT}).",
                         "default": 20,
                     },
                     "skip": {
@@ -184,7 +202,9 @@ async def list_tools() -> list[types.Tool]:
                 "Execute a MongoDB aggregation pipeline. "
                 "Accepts a JSON array of pipeline stages. "
                 "A $limit stage is appended automatically if not present. "
-                "Example: '[{\"$match\": {\"status\": \"active\"}}, {\"$group\": {\"_id\": \"$country\", \"count\": {\"$sum\": 1}}}]'"
+                f"Hard limit: {MAX_RESULT_LIMIT} results. "
+                "Example: '[{\"$match\": {\"status\": \"active\"}}, "
+                "{\"$group\": {\"_id\": \"$country\", \"count\": {\"$sum\": 1}}}]'"
             ),
             inputSchema={
                 "type": "object",
@@ -195,7 +215,7 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Max results (default 50, max 200).",
+                        "description": f"Max results (default 50, max {MAX_RESULT_LIMIT}).",
                         "default": 50,
                     },
                     "database": {"type": "string"},
@@ -230,7 +250,10 @@ async def list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "field": {"type": "string", "description": "Field name (supports dot notation, e.g. 'address.country')."},
+                    "field": {
+                        "type": "string",
+                        "description": "Field name (supports dot notation, e.g. 'address.country').",
+                    },
                     "filter": {"type": "string", "description": "Optional JSON filter to scope the distinct query."},
                     "database": {"type": "string"},
                     "collection": {"type": "string"},
@@ -269,7 +292,6 @@ async def list_tools() -> list[types.Tool]:
 # ---------------------------------------------------------------------------
 
 def _require_connection() -> str | None:
-    """Return error message if not connected, else None."""
     if not session.is_connected():
         return (
             "Not connected to any Cosmos DB account. "
@@ -277,24 +299,29 @@ def _require_connection() -> str | None:
         )
     return None
 
-def _resolve_db(args: dict) -> str | None:
+
+def _resolve_db(args: dict[str, Any]) -> str | None:
     return args.get("database") or session.database or None
 
-def _resolve_col(args: dict) -> str | None:
+
+def _resolve_col(args: dict[str, Any]) -> str | None:
     return args.get("collection") or session.collection or None
 
-def _require_db_col(args: dict) -> tuple[str, str] | tuple[None, str]:
+
+def _require_db_col(args: dict[str, Any]) -> tuple[tuple[str, str] | None, str | None]:
     db = _resolve_db(args)
     col = _resolve_col(args)
     if not db:
         return None, "No database specified. Pass 'database' or call set_context first."
     if not col:
         return None, "No collection specified. Pass 'collection' or call set_context first."
-    return (db, col), None  # type: ignore[return-value]
+    return (db, col), None
 
-def _ok(data: dict | list | str) -> list[types.TextContent]:
+
+def _ok(data: dict[str, Any] | list[Any] | str) -> list[types.TextContent]:
     text = json.dumps(data, indent=2, default=str) if not isinstance(data, str) else data
     return [types.TextContent(type="text", text=text)]
+
 
 def _err(msg: str) -> list[types.TextContent]:
     return [types.TextContent(type="text", text=f"ERROR: {msg}")]
@@ -304,8 +331,8 @@ def _err(msg: str) -> list[types.TextContent]:
 # Tool dispatch
 # ---------------------------------------------------------------------------
 
-@app.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
+@app.call_tool()  # type: ignore[untyped-decorator]
+async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
     try:
         return await _dispatch(name, arguments)
     except Exception as exc:
@@ -313,7 +340,11 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         return _err(str(exc))
 
 
-async def _dispatch(name: str, args: dict) -> list[types.TextContent]:
+async def _dispatch(name: str, args: dict[str, Any]) -> list[types.TextContent]:
+
+    # ── check_auth ──────────────────────────────────────────────────────────
+    if name == "check_auth":
+        return _ok(azure_service.check_auth())
 
     # ── list_cosmos_accounts ────────────────────────────────────────────────
     if name == "list_cosmos_accounts":
@@ -363,10 +394,11 @@ async def _dispatch(name: str, args: dict) -> list[types.TextContent]:
     if name == "describe_collection":
         if err := _require_connection():
             return _err(err)
-        target, err = _require_db_col(args)
-        if err:
+        result, err = _require_db_col(args)
+        if err is not None:
             return _err(err)
-        db, col = target
+        assert result is not None
+        db, col = result
         sample = min(args.get("sample_size", 100), 500)
         schema = mongo_service.infer_schema(session.connection_string, db, col, sample)
         return _ok({"database": db, "collection": col, "sampled": sample, "schema": schema})
@@ -375,10 +407,11 @@ async def _dispatch(name: str, args: dict) -> list[types.TextContent]:
     if name == "get_document":
         if err := _require_connection():
             return _err(err)
-        target, err = _require_db_col(args)
-        if err:
+        result, err = _require_db_col(args)
+        if err is not None:
             return _err(err)
-        db, col = target
+        assert result is not None
+        db, col = result
         doc = mongo_service.get_document_by_id(session.connection_string, db, col, args["document_id"])
         if doc is None:
             return _err(f"Document '{args['document_id']}' not found in {db}.{col}")
@@ -388,12 +421,14 @@ async def _dispatch(name: str, args: dict) -> list[types.TextContent]:
     if name == "find_documents":
         if err := _require_connection():
             return _err(err)
-        target, err = _require_db_col(args)
-        if err:
+        result, err = _require_db_col(args)
+        if err is not None:
             return _err(err)
-        db, col = target
-        limit = min(args.get("limit", 20), 200)
-        result = mongo_service.query_collection(
+        assert result is not None
+        db, col = result
+        requested = int(args.get("limit", 20))
+        limit = min(requested, MAX_RESULT_LIMIT)
+        data = mongo_service.query_collection(
             connection_string=session.connection_string,
             db_name=db,
             collection_name=col,
@@ -401,53 +436,65 @@ async def _dispatch(name: str, args: dict) -> list[types.TextContent]:
             projection_str=args.get("projection"),
             sort_str=args.get("sort"),
             limit=limit,
-            skip=args.get("skip", 0),
+            skip=int(args.get("skip", 0)),
         )
-        return _ok(result)
+        data["limit_applied"] = limit
+        if limit < requested:
+            data["limit_capped"] = True
+            data["limit_cap_reason"] = f"QUERYMCPAL_MAX_LIMIT={MAX_RESULT_LIMIT}"
+        return _ok(data)
 
     # ── aggregate ───────────────────────────────────────────────────────────
     if name == "aggregate":
         if err := _require_connection():
             return _err(err)
-        target, err = _require_db_col(args)
-        if err:
+        result, err = _require_db_col(args)
+        if err is not None:
             return _err(err)
-        db, col = target
-        limit = min(args.get("limit", 50), 200)
-        result = mongo_service.aggregate_collection(
+        assert result is not None
+        db, col = result
+        requested = int(args.get("limit", 50))
+        limit = min(requested, MAX_RESULT_LIMIT)
+        data = mongo_service.aggregate_collection(
             connection_string=session.connection_string,
             db_name=db,
             collection_name=col,
             pipeline_str=args["pipeline"],
             limit=limit,
         )
-        return _ok(result)
+        data["limit_applied"] = limit
+        if limit < requested:
+            data["limit_capped"] = True
+            data["limit_cap_reason"] = f"QUERYMCPAL_MAX_LIMIT={MAX_RESULT_LIMIT}"
+        return _ok(data)
 
     # ── count_documents ─────────────────────────────────────────────────────
     if name == "count_documents":
         if err := _require_connection():
             return _err(err)
-        target, err = _require_db_col(args)
-        if err:
+        result, err = _require_db_col(args)
+        if err is not None:
             return _err(err)
-        db, col = target
-        result = mongo_service.count_documents(
+        assert result is not None
+        db, col = result
+        data = mongo_service.count_documents(
             session.connection_string, db, col, args.get("filter")
         )
-        return _ok(result)
+        return _ok(data)
 
     # ── distinct_values ─────────────────────────────────────────────────────
     if name == "distinct_values":
         if err := _require_connection():
             return _err(err)
-        target, err = _require_db_col(args)
-        if err:
+        result, err = _require_db_col(args)
+        if err is not None:
             return _err(err)
-        db, col = target
-        result = mongo_service.get_distinct_values(
+        assert result is not None
+        db, col = result
+        data = mongo_service.get_distinct_values(
             session.connection_string, db, col, args["field"], args.get("filter")
         )
-        return _ok(result)
+        return _ok(data)
 
     # ── show_context ────────────────────────────────────────────────────────
     if name == "show_context":

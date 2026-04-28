@@ -140,6 +140,66 @@ Token refresh is handled automatically by the Azure identity library on each req
 | `set_context` | Change the active database or collection |
 | `clear_context` | Disconnect and reset session |
 
+## For developers
+
+If you have Python 3.12+ and the Azure CLI installed locally, you can run QueryMCPal directly without Docker using `uvx`:
+
+```bash
+uvx querymcpal
+```
+
+This fetches and runs the package in an isolated environment with no installation step. `az login` credentials on the host are picked up automatically.
+
+To wire it into Claude Desktop instead of the Docker approach, update `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "querymcpal": {
+      "command": "uvx",
+      "args": ["querymcpal"]
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+**Auth error after az login**
+
+Run `check_auth` in Claude to get a precise status. If it returns `ok: false`, re-run `az login` in your terminal and restart Claude Desktop.
+
+**Testing against the Cosmos DB Emulator**
+
+Set `QUERYMCPAL_EMULATOR=true` to skip all ARM calls and connect to a local emulator instance instead:
+
+```json
+{
+  "mcpServers": {
+    "querymcpal": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "--platform", "linux/arm64",
+        "--network", "host",
+        "-e", "QUERYMCPAL_EMULATOR=true",
+        "querymcpal:dev"
+      ]
+    }
+  }
+}
+```
+
+QueryMCPal will return a synthetic `local-emulator` account and connect to `mongodb://localhost:10255` using the emulator's default key. No Azure credentials needed.
+
+**Result size cap**
+
+By default, `find_documents` and `aggregate` are capped at 1000 results. Raise or lower this with the `QUERYMCPAL_MAX_LIMIT` environment variable:
+
+```bash
+-e QUERYMCPAL_MAX_LIMIT=500
+```
+
 ## Limitations
 
 - macOS + Apple Silicon only in this configuration (ARM64 Docker image). Intel Mac and Linux support is straightforward — change the `--platform` flag.

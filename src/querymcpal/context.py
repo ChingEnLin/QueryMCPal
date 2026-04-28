@@ -1,17 +1,18 @@
 """
 context.py
 Lightweight in-process session that remembers which Cosmos account / database /
-collection the user is currently working with.  This lets Claude omit redundant
-arguments after the first `connect` call.
+collection the user is currently working with.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+_REDACTED = "[REDACTED]"
 
 
 @dataclass
-class Session:
+class SessionContext:
     account_id: str = ""
     account_name: str = ""
     connection_string: str = ""
@@ -38,6 +39,14 @@ class Session:
         self.database = ""
         self.collection = ""
 
+    def __repr__(self) -> str:
+        return (
+            f"SessionContext(account_id={self.account_id!r}, "
+            f"account_name={self.account_name!r}, "
+            f"connection_string={_REDACTED!r}, "
+            f"database={self.database!r}, "
+            f"collection={self.collection!r})"
+        )
 
-# Global singleton — one per server process
-session = Session()
+    def __str__(self) -> str:
+        return self.context_summary()

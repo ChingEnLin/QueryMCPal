@@ -6,24 +6,36 @@ and connection string retrieval.
 
 from __future__ import annotations
 
+import base64
+import json as _json
 import logging
-from functools import lru_cache
-
 import os
+from functools import lru_cache
+from typing import Any
 
 import requests
 from azure.core.exceptions import ClientAuthenticationError
-from azure.identity import DefaultAzureCredential
+from azure.identity import CredentialUnavailableError, DefaultAzureCredential
 from cachetools import TTLCache, cached
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Emulator shortcut — set QUERYMCPAL_EMULATOR=true to skip ARM entirely
+# ---------------------------------------------------------------------------
+_EMULATOR = os.getenv("QUERYMCPAL_EMULATOR", "").lower() == "true"
+# Default emulator connection string (Cosmos DB emulator default key)
+_EMULATOR_CONN_STR = (
+    "mongodb://localhost:C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4"
+    "b8mGGyPMbIZnqyMcsG9CXoGXkOKDiNZ/YSj5rtXM96whEh27Y3BKg=@localhost:10255/admin?ssl=true"
+)
+
+# ---------------------------------------------------------------------------
 # TTL caches — avoids hammering ARM on every tool call
 # ---------------------------------------------------------------------------
-_subscriptions_cache: TTLCache = TTLCache(maxsize=1, ttl=3600)
-_accounts_cache: TTLCache = TTLCache(maxsize=10, ttl=3600)
-_connstr_cache: TTLCache = TTLCache(maxsize=20, ttl=3600)
+_subscriptions_cache: TTLCache[Any, Any] = TTLCache(maxsize=1, ttl=3600)
+_accounts_cache: TTLCache[Any, Any] = TTLCache(maxsize=10, ttl=3600)
+_connstr_cache: TTLCache[Any, Any] = TTLCache(maxsize=20, ttl=3600)
 
 
 @lru_cache(maxsize=1)
@@ -51,22 +63,64 @@ def _arm_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {_arm_token()}"}
 
 
+def _upn_from_token(token_str: str) -> str:
+    """Extract UPN/email from JWT payload without verifying signature."""
+    try:
+        payload_b64 = token_str.split(".")[1]
+        payload_b64 += "=" * (4 - len(payload_b64) % 4)
+        payload: dict[str, Any] = _json.loads(base64.b64decode(payload_b64))
+        upn = payload.get("upn") or payload.get("unique_name") or payload.get("email") or ""
+        return str(upn) if upn else "authenticated"
+    except Exception:  # noqa: BLE001
+        return "authenticated"
+
+
+# ---------------------------------------------------------------------------
+# Auth health check (Item 3)
+# ---------------------------------------------------------------------------
+
+def check_auth() -> dict[str, Any]:
+    """Return auth status without side-effects — safe to call any time."""
+    if _EMULATOR:
+        return {"ok": True, "account": "emulator", "mode": "emulator"}
+    try:
+        cred = DefaultAzureCredential()
+        token = cred.get_token("https://management.azure.com/.default")
+        return {"ok": True, "account": _upn_from_token(token.token)}
+    except (ClientAuthenticationError, CredentialUnavailableError):
+        return {
+            "ok": False,
+            "reason": "Run `az login` in a terminal and restart Claude Desktop.",
+        }
+
+
 # ---------------------------------------------------------------------------
 # Subscription & account discovery
 # ---------------------------------------------------------------------------
 
 @cached(_subscriptions_cache)
-def list_subscriptions() -> list[dict]:
+def list_subscriptions() -> list[dict[str, Any]]:
     url = "https://management.azure.com/subscriptions?api-version=2020-01-01"
     resp = requests.get(url, headers=_arm_headers(), timeout=15)
     resp.raise_for_status()
-    return resp.json().get("value", [])
+    return list(resp.json().get("value", []))
 
 
 @cached(_accounts_cache)
-def list_cosmos_accounts() -> list[dict]:
+def list_cosmos_accounts() -> list[dict[str, Any]]:
     """Return all Cosmos DB accounts visible to the current credential."""
-    accounts: list[dict] = []
+    if _EMULATOR:
+        return [
+            {
+                "name": "local-emulator",
+                "id": "emulator",
+                "subscription": "local",
+                "location": "localhost",
+                "kind": "GlobalDocumentDB",
+            }
+        ]
+
+    accounts: list[dict[str, Any]] = []
     for sub in list_subscriptions():
         sub_id = sub["subscriptionId"]
         sub_name = sub.get("displayName", sub_id)
@@ -95,6 +149,9 @@ def list_cosmos_accounts() -> list[dict]:
 @cached(_connstr_cache)
 def get_connection_string(account_id: str) -> str:
     """Retrieve the primary connection string for a Cosmos DB account via ARM."""
+    if _EMULATOR:
+        return _EMULATOR_CONN_STR
+
     url = (
         f"https://management.azure.com/{account_id}"
         "/listConnectionStrings?api-version=2023-03-15"
@@ -105,12 +162,12 @@ def get_connection_string(account_id: str) -> str:
             f"Failed to retrieve connection string for {account_id}: "
             f"{resp.status_code} – {resp.text}"
         )
-    conn_strings = resp.json().get("connectionStrings", [])
+    conn_strings: list[dict[str, Any]] = resp.json().get("connectionStrings", [])
     if not conn_strings:
         raise RuntimeError(f"No connection strings returned for account {account_id}")
     # Prefer the primary MongoDB connection string
     for cs in conn_strings:
         desc = cs.get("description", "").lower()
         if "primary" in desc and "mongo" in desc:
-            return cs["connectionString"]
-    return conn_strings[0]["connectionString"]
+            return str(cs["connectionString"])
+    return str(conn_strings[0]["connectionString"])
