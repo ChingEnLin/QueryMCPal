@@ -74,7 +74,20 @@ docker build --platform linux/arm64 -t querymcpal:dev .
 
 > For Intel Macs change `linux/arm64` to `linux/amd64` in the build command and the config below.
 
-**3. Add to Claude Desktop**
+**3. Allow Docker Desktop to access `~/.azure`**
+
+Docker Desktop restricts which host directories containers can mount. You need to add the `.azure` directory to its allowed list before the volume mount will work.
+
+**macOS:** Open Docker Desktop → **Settings → Resources → File Sharing** and add:
+```
+~/.azure
+```
+
+Apply & Restart Docker Desktop after saving.
+
+**4. Add to Claude Desktop**
+
+> **Windows users:** If you'd prefer to skip Docker entirely, see the [Windows setup](#windows-setup) section — `uvx` is simpler and avoids the file sharing step.
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -96,7 +109,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 Replace `YOUR_USERNAME` with your macOS username (`echo $USER`). Use the full path — `${HOME}` does not expand in Claude Desktop's config.
 
-**4. Restart Claude Desktop**
+**5. Restart Claude Desktop**
 
 Quit and relaunch. QueryMCPal will appear as a connected MCP server.
 
