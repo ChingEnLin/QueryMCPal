@@ -140,6 +140,44 @@ Token refresh is handled automatically by the Azure identity library on each req
 | `set_context` | Change the active database or collection |
 | `clear_context` | Disconnect and reset session |
 
+## Windows setup
+
+Docker volume mounts for `.azure` credentials are tricky on Windows. The simpler path is `uvx`, which runs QueryMCPal directly on the host — no Docker needed.
+
+**1. Install prerequisites**
+
+```powershell
+winget install astral-sh.uv
+winget install Microsoft.AzureCLI
+```
+
+**2. Log in to Azure**
+
+```powershell
+az login
+```
+
+**3. Add to Claude Desktop**
+
+Edit `%APPDATA%\Claude\claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "querymcpal": {
+      "command": "uvx",
+      "args": ["querymcpal"]
+    }
+  }
+}
+```
+
+`uvx` fetches and runs the package in an isolated environment. `az login` credentials on the host are picked up automatically — no connection strings, no secrets.
+
+**4. Restart Claude Desktop**
+
+Quit and relaunch. QueryMCPal will appear as a connected MCP server.
+
 ## For developers
 
 If you have Python 3.12+ and the Azure CLI installed locally, you can run QueryMCPal directly without Docker using `uvx`:
@@ -202,6 +240,6 @@ By default, `find_documents` and `aggregate` are capped at 1000 results. Raise o
 
 ## Limitations
 
-- macOS + Apple Silicon only in this configuration (ARM64 Docker image). Intel Mac and Linux support is straightforward — change the `--platform` flag.
+- The Docker setup targets macOS. Windows users should follow the [Windows setup](#windows-setup) section above, which uses `uvx` instead of Docker. Intel Mac and Linux users can use Docker with `--platform linux/amd64`.
 - Read-only — no insert, update, or delete operations by design.
 - Requires the MongoDB API variant of Cosmos DB. The Core (SQL) API is not supported.
