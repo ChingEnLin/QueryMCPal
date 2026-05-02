@@ -1,22 +1,24 @@
 # QueryMCPal
 
-An MCP server that lets Claude talk directly to your Azure Cosmos DB (MongoDB API) accounts — no service principals, no managed identities, no connection strings in config files. Just `az login` and go.
+An MCP server that lets any MCP-compatible AI tool talk directly to your Azure Cosmos DB (MongoDB API) accounts — no service principals, no managed identities, no connection strings in config files. Just `az login` and go.
+
+Works with **Claude Desktop**, **GitHub Copilot in VS Code**, and any other tool that supports the Model Context Protocol.
 
 **You will never copy-paste a password from the Azure Portal.** QueryMCPal authenticates using the Azure CLI session already on your machine — the same one you use for everything else. No secrets in config files, nothing to rotate, nothing to leak.
 
-**You don't need to know your database structure.** Just ask Claude *"What's in here?"* and it will sample your collection and map out every field, type, and nesting level before you write a single query.
+**You don't need to know your database structure.** Just ask your AI tool *"What's in here?"* and it will sample your collection and map out every field, type, and nesting level before you write a single query.
 
 ## Background
 
 This project grew out of [QueryPal](https://github.com/ChingEnLin/QueryPal) — a full web platform for exploring and managing Cosmos DB with AI, built for teams that need collaboration features, CRUD operations, audit trails, and a proper deployment.
 
-QueryPal solves the team problem well. But in day-to-day development there's a different problem: you just want to quickly ask questions about your data without opening another browser tab, logging into a deployed app, or remembering what that collection schema looked like. You're already in Claude. Your Azure credentials are already on your machine. That gap is what QueryMCPal is for.
+QueryPal solves the team problem well. But in day-to-day development there's a different problem: you just want to quickly ask questions about your data without opening another browser tab, logging into a deployed app, or remembering what that collection schema looked like. You're already in your AI tool of choice. Your Azure credentials are already on your machine. That gap is what QueryMCPal is for.
 
 | | [QueryPal](https://github.com/ChingEnLin/QueryPal) | QueryMCPal |
 |---|---|---|
 | **Built for** | Teams, analysts, production workflows | Individual developers, local exploration |
-| **Interface** | Web app (React + FastAPI, deployed) | Claude Desktop (MCP, runs locally) |
-| **AI** | Google Gemini | Claude |
+| **Interface** | Web app (React + FastAPI, deployed) | Any MCP-compatible AI tool (Claude, Copilot, etc.) |
+| **AI** | Google Gemini | Claude, GitHub Copilot, and others |
 | **Operations** | Full CRUD + audit trails | Read-only |
 | **Auth** | Microsoft Entra ID + OBO flow | `az login` (your existing CLI session) |
 | **Infrastructure** | Cloud Run deployment | Docker on your Mac |
@@ -85,9 +87,11 @@ Docker Desktop restricts which host directories containers can mount. You need t
 
 Apply & Restart Docker Desktop after saving.
 
-**4. Add to Claude Desktop**
+**4. Add to your AI tool**
 
 > **Windows users:** If you'd prefer to skip Docker entirely, see the [Windows setup](#windows-setup) section — `uvx` is simpler and avoids the file sharing step.
+
+**Claude Desktop**
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -109,13 +113,36 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 Replace `YOUR_USERNAME` with your macOS username (`echo $USER`). Use the full path — `${HOME}` does not expand in Claude Desktop's config.
 
-**5. Restart Claude Desktop**
+**VS Code (GitHub Copilot)**
 
-Quit and relaunch. QueryMCPal will appear as a connected MCP server.
+Create or edit `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "querymcpal": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "--platform", "linux/arm64",
+        "-v", "/Users/YOUR_USERNAME/.azure:/home/mcpuser/.azure",
+        "querymcpal:dev"
+      ]
+    }
+  }
+}
+```
+
+Replace `YOUR_USERNAME` with your macOS username (`echo $USER`). VS Code will prompt you to start the server the next time you open the workspace.
+
+**5. Restart your AI tool**
+
+For Claude Desktop: quit and relaunch. For VS Code: reload the window or accept the prompt to start the MCP server. QueryMCPal will appear as a connected MCP server.
 
 ## Usage
 
-Once connected, talk to Claude naturally:
+Once connected, talk to your AI tool naturally:
 
 ```
 "What Cosmos DB accounts do I have access to?"
@@ -127,7 +154,7 @@ Once connected, talk to Claude naturally:
 "What are the distinct values for the country field?"
 ```
 
-Claude will chain the tools automatically — you don't need to know which tool does what.
+The AI will chain the tools automatically — you don't need to know which tool does what.
 
 ## How authentication works
 
@@ -170,7 +197,9 @@ winget install Microsoft.AzureCLI
 az login
 ```
 
-**3. Add to Claude Desktop**
+**3. Add to your AI tool**
+
+**Claude Desktop**
 
 Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 
@@ -185,11 +214,27 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 }
 ```
 
+**VS Code (GitHub Copilot)**
+
+Create or edit `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "querymcpal": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["querymcpal"]
+    }
+  }
+}
+```
+
 `uvx` fetches and runs the package in an isolated environment. `az login` credentials on the host are picked up automatically — no connection strings, no secrets.
 
-**4. Restart Claude Desktop**
+**4. Restart your AI tool**
 
-Quit and relaunch. QueryMCPal will appear as a connected MCP server.
+For Claude Desktop: quit and relaunch. For VS Code: reload the window or accept the prompt to start the MCP server.
 
 ## For developers
 
@@ -201,12 +246,28 @@ uvx querymcpal
 
 This fetches and runs the package in an isolated environment with no installation step. `az login` credentials on the host are picked up automatically.
 
-To wire it into Claude Desktop instead of the Docker approach, update `claude_desktop_config.json`:
+To wire it into an AI tool instead of the Docker approach:
+
+**Claude Desktop** — update `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "querymcpal": {
+      "command": "uvx",
+      "args": ["querymcpal"]
+    }
+  }
+}
+```
+
+**VS Code (GitHub Copilot)** — create `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "querymcpal": {
+      "type": "stdio",
       "command": "uvx",
       "args": ["querymcpal"]
     }
