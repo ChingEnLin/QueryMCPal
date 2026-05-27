@@ -28,18 +28,18 @@ Think of them as the same idea at different points in the workflow: QueryPal is 
 
 ## Why this instead of the official toolkit?
 
-The [official Azure Cosmos DB MCP Toolkit](https://github.com/AzureCosmosDB/MCPToolkit) requires you to supply a connection string up front. That means either hardcoding credentials in your Claude Desktop config, or setting up a service principal with a client secret — extra Azure resources to manage, extra things to rotate, extra things to leak.
+The [official Azure Cosmos DB MCP Toolkit](https://github.com/AzureCosmosDB/MCPToolkit) targets the Cosmos DB NoSQL API and is built for enterprise deployments: you stand up Azure Container Apps, an Azure Container Registry, an Entra ID app registration, and RBAC role assignments before you can run a query. Great if that's the shape of your environment — heavy if you just want to poke at a MongoDB-API collection from your laptop.
 
 QueryMCPal takes a different approach:
 
 | | QueryMCPal | Official Toolkit |
 |---|---|---|
-| **Auth** | Your existing `az login` session | Connection string in config |
-| **Account discovery** | Automatic — finds all your Cosmos accounts via ARM | Manual — one connection string per server |
-| **Credentials in config** | None | Yes (connection string) |
-| **Extra Azure setup** | None | Service principal or managed identity recommended |
-| **Multi-account** | Switch between accounts in the same session | One instance per account |
-| **Runs as** | Docker container (isolated) | Node.js process on host |
+| **Cosmos DB API** | MongoDB API | NoSQL API |
+| **Auth** | Your existing `az login` session | Entra ID app + JWT, via deployed server |
+| **Account discovery** | Automatic — finds all your Cosmos accounts via ARM | Manual — one endpoint per deployment |
+| **Azure resources to provision** | None | Container Apps, ACR, Managed Identity, Entra App, RBAC |
+| **Multi-account** | Switch between accounts in the same session | One deployment per account |
+| **Runs as** | Local Docker container | Hosted Container Apps service (or local Docker Compose) |
 
 If you already use the Azure CLI day-to-day, QueryMCPal just works with what you have.
 
