@@ -50,8 +50,8 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="check_auth",
             description=(
-                "Check whether the current Azure credential is valid. "
-                "Call this first if you suspect an authentication problem."
+                "Check whether the current Azure credential is valid for Cosmos DB "
+                "(MongoDB API) access. Call this first if you suspect an authentication problem."
             ),
             inputSchema={"type": "object", "properties": {}, "required": []},
         ),
@@ -106,7 +106,7 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="list_collections",
             description=(
-                "List all collections in a database with their estimated document counts."
+                "List all collections in a Cosmos DB (MongoDB API) database with their estimated document counts."
             ),
             inputSchema={
                 "type": "object",
@@ -123,7 +123,7 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="describe_collection",
             description=(
-                "Infer the schema of a collection by sampling up to 100 documents. "
+                "Infer the schema of a Cosmos DB (MongoDB API) collection by sampling up to 100 documents. "
                 "Returns field names, observed types, and nullable flags. "
                 "Great for understanding data structure before querying."
             ),
@@ -143,7 +143,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="get_document",
-            description="Fetch a single document by its _id.",
+            description="Fetch a single document from a Cosmos DB (MongoDB API) collection by its _id.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -226,7 +226,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="count_documents",
-            description="Count documents matching a filter. Fast and doesn't return document data.",
+            description="Count documents in a Cosmos DB (MongoDB API) collection matching a filter. Fast and doesn't return document data.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -244,8 +244,8 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="distinct_values",
             description=(
-                "Get all distinct values for a field. Useful for understanding "
-                "enums, categories, and cardinality."
+                "Get all distinct values for a field in a Cosmos DB (MongoDB API) collection. "
+                "Useful for understanding enums, categories, and cardinality."
             ),
             inputSchema={
                 "type": "object",
@@ -264,12 +264,12 @@ async def list_tools() -> list[types.Tool]:
         # ── Session context ────────────────────────────────────────────────
         types.Tool(
             name="show_context",
-            description="Show the current session context: connected account, database, and collection.",
+            description="Show the current Cosmos DB (MongoDB API) session context: connected account, database, and collection.",
             inputSchema={"type": "object", "properties": {}, "required": []},
         ),
         types.Tool(
             name="set_context",
-            description="Update the active database and/or collection without reconnecting.",
+            description="Update the active Cosmos DB (MongoDB API) database and/or collection without reconnecting.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -281,7 +281,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="clear_context",
-            description="Disconnect from the current account and clear all session state.",
+            description="Disconnect from the current Cosmos DB (MongoDB API) account and clear all session state.",
             inputSchema={"type": "object", "properties": {}, "required": []},
         ),
     ]
