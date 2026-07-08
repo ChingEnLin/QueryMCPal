@@ -4,6 +4,7 @@ RUN useradd -m -u 501 mcpuser
 
 WORKDIR /app
 COPY . .
+RUN chmod -R a+r /app/src
 
 RUN pip install --no-cache-dir -e . azure-cli
 
